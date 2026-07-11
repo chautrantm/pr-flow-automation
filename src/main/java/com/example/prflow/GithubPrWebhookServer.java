@@ -24,13 +24,13 @@ import java.util.regex.Pattern;
 public class GithubPrWebhookServer {
     public static void main(String[] args) throws IOException {
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
-        String jiraBaseUrl = System.getenv("https://chautminhtran.atlassian.net");
-        String jiraEmail = System.getenv("chautminhtran@gmail.com");
-        String jiraToken = System.getenv("JATATT3xFfGF0f24812mrFS5OFWTN9P7ldALSWt9leCGfM8CFrJRe_9_PyihhKvKpl8IgKm8D-yI--T9GUnsUKh3oq48CLv0tb8Z6HXvWyTy9aGAeJ8gOCErA5OFp7iNUimPqQcaQpL5CqX4GCdad5WFqoxJR7kTl6TIdprHPQxGlTXzRgTuFz80=FCB31009");
-        String webhookSecret = System.getenv("25102003");
+        String jiraBaseUrl = System.getenv("JIRA_BASE_URL");
+        String jiraEmail = System.getenv("JIRA_BOT_EMAIL");
+        String jiraToken = System.getenv("JIRA_API_TOKEN");
+        String webhookSecret = System.getenv("GITHUB_WEBHOOK_SECRET");
 
         if (jiraBaseUrl == null || jiraEmail == null || jiraToken == null) {
-            throw new IllegalStateException("Please set https://chautminhtran.atlassian.net, JIRA_BOT_EMAIL, and JIRA_API_TOKEN");
+            throw new IllegalStateException("Please set JIRA_BASE_URL, JIRA_BOT_EMAIL, and JIRA_API_TOKEN");
         }
 
         Map<String, String> transitions = new LinkedHashMap<>();
