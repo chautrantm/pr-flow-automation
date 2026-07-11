@@ -1,0 +1,24 @@
+# Java / build outputs
+out/
+build/
+target/
+.classpath
+.project
+.settings/
+*.class
+*.jar
+*.war
+*.ear
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local env files
+.env
+.env.*
+oracleJdk-26/
