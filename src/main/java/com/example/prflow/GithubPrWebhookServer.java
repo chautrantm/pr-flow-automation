@@ -2,9 +2,6 @@ package com.example.prflow;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -12,7 +9,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -23,8 +19,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 public class GithubPrWebhookServer {
+
     private static final Map<String, String> dotEnv = new LinkedHashMap<>();
 
     public static void main(String[] args) throws IOException {
@@ -41,13 +40,13 @@ public class GithubPrWebhookServer {
         }
 
         Map<String, String> transitions = new LinkedHashMap<>();
-        transitions.put("develop", System.getenv().getOrDefault("JIRA_TRANSITION_DEVELOP", "42"));
-        transitions.put("main", System.getenv().getOrDefault("JIRA_TRANSITION_MAIN", "41"));
-        transitions.put("release", System.getenv().getOrDefault("JIRA_TRANSITION_RELEASE", "42"));
-        transitions.put("default", System.getenv().getOrDefault("JIRA_TRANSITION_DEFAULT", "42"));
+        transitions.put("develop", getEnv("JIRA_TRANSITION_DEVELOP", "42"));
+        transitions.put("main", getEnv("JIRA_TRANSITION_MAIN", "41"));
+        transitions.put("release", getEnv("JIRA_TRANSITION_RELEASE", "42"));
+        transitions.put("default", getEnv("JIRA_TRANSITION_DEFAULT", "42"));
 
-        String epicTransitionId = System.getenv().getOrDefault("JIRA_TRANSITION_EPIC", "");
-        String parentIssueKey = System.getenv().getOrDefault("JIRA_PARENT_ISSUE_KEY", "");
+        String epicTransitionId = getEnv("JIRA_TRANSITION_EPIC", "");
+        String parentIssueKey = getEnv("JIRA_PARENT_ISSUE_KEY", "");
 
         JiraTransitionService transitionService = new JiraTransitionService(jiraBaseUrl, jiraEmail, jiraToken, transitions, epicTransitionId, parentIssueKey);
         JiraKeyExtractor extractor = new JiraKeyExtractor();

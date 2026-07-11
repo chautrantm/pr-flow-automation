@@ -8,7 +8,7 @@ if (Test-Path $envFile) {
                 $name = $pair[0].Trim()
                 $value = $pair[1].Trim()
                 if (-not [string]::IsNullOrWhiteSpace($name)) {
-                    $env:$name = $value
+                    Set-Item -Path "Env:$name" -Value $value
                 }
             }
         }
@@ -34,7 +34,8 @@ if (-not (Test-Path $buildDir)) {
 }
 
 Write-Host "Compiling Java sources..."
-& $javac -d $buildDir "$PSScriptRoot\src\main\java\com\example\prflow\*.java"
+$sourceFiles = Get-ChildItem -Path (Join-Path $PSScriptRoot "src\main\java\com\example\prflow") -Filter *.java -File | ForEach-Object { $_.FullName }
+& $javac -d $buildDir $sourceFiles
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Java compilation failed. Fix errors and retry."
     exit $LASTEXITCODE
