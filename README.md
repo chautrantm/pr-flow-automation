@@ -20,11 +20,27 @@ You can change these in the code or pass them in later.
 - default -> 51
 
 ## Run locally
-`ash
-mvn test
-mvn package
-java -cp target/pr-flow-automation-1.0-SNAPSHOT.jar com.example.prflow.GithubPrWebhookServer
-`
+1. Copy the example env file and fill in your values:
+
+   Copy-Item .env.example .env
+   # then edit .env with your Jira/GitHub values
+
+2. Start the server from PowerShell:
+
+   .\run-local.ps1
+
+3. The server listens on:
+
+   http://localhost:8080/github/pr
+
+4. To test locally without a GitHub webhook, send a POST request:
+
+   curl -X POST http://localhost:8080/github/pr \
+     -H "Content-Type: application/json" \
+     -d @payload.json
+
+   If you set `GITHUB_WEBHOOK_SECRET`, send the correct `X-Hub-Signature-256` header.
+   If you do not set `GITHUB_WEBHOOK_SECRET`, the server will accept requests without signature validation.
 
 ## GitHub webhook setup
 - Payload URL: https://your-domain/github/pr

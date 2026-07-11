@@ -60,8 +60,9 @@ public class JiraTransitionService {
         }
 
         int statusCode = connection.getResponseCode();
+        String responseBody = readBody(connection);
+        System.out.println("[jira] issue=" + issueKey + " transitionId=" + transitionId + " status=" + statusCode + " response=" + responseBody);
         if (statusCode >= 400) {
-            String responseBody = readBody(connection);
             throw new IOException("Jira transition failed: " + statusCode + " " + responseBody);
         }
     }

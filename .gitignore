@@ -18,7 +18,7 @@ target/
 .DS_Store
 Thumbs.db
 
-# Local env files
+# # Local env files
 # .env
 # .env.*
 oracleJdk-26/

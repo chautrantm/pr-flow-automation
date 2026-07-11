@@ -5,6 +5,9 @@ import com.sun.net.httpserver.HttpServer;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -22,22 +25,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class GithubPrWebhookServer {
+    private static final Map<String, String> dotEnv = new LinkedHashMap<>();
+
     public static void main(String[] args) throws IOException {
-        int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
-        String jiraBaseUrl = System.getenv("JIRA_BASE_URL");
-        String jiraEmail = System.getenv("JIRA_BOT_EMAIL");
-        String jiraToken = System.getenv("JIRA_API_TOKEN");
-        String webhookSecret = System.getenv("GITHUB_WEBHOOK_SECRET");
+        loadDotEnv();
+
+        int port = Integer.parseInt(getEnv("PORT", "8080"));
+        String jiraBaseUrl = getEnv("JIRA_BASE_URL");
+        String jiraEmail = getEnv("JIRA_BOT_EMAIL");
+        String jiraToken = getEnv("JIRA_API_TOKEN");
+        String webhookSecret = getEnv("GITHUB_WEBHOOK_SECRET");
 
         if (jiraBaseUrl == null || jiraEmail == null || jiraToken == null) {
             throw new IllegalStateException("Please set JIRA_BASE_URL, JIRA_BOT_EMAIL, and JIRA_API_TOKEN");
         }
 
         Map<String, String> transitions = new LinkedHashMap<>();
-        transitions.put("develop", System.getenv().getOrDefault("JIRA_TRANSITION_DEVELOP", "31"));
+        transitions.put("develop", System.getenv().getOrDefault("JIRA_TRANSITION_DEVELOP", "42"));
         transitions.put("main", System.getenv().getOrDefault("JIRA_TRANSITION_MAIN", "41"));
-        transitions.put("release", System.getenv().getOrDefault("JIRA_TRANSITION_RELEASE", "51"));
-        transitions.put("default", System.getenv().getOrDefault("JIRA_TRANSITION_DEFAULT", "51"));
+        transitions.put("release", System.getenv().getOrDefault("JIRA_TRANSITION_RELEASE", "42"));
+        transitions.put("default", System.getenv().getOrDefault("JIRA_TRANSITION_DEFAULT", "42"));
 
         String epicTransitionId = System.getenv().getOrDefault("JIRA_TRANSITION_EPIC", "");
         String parentIssueKey = System.getenv().getOrDefault("JIRA_PARENT_ISSUE_KEY", "");
@@ -48,6 +55,7 @@ public class GithubPrWebhookServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/github/pr", exchange -> {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                System.out.println("[webhook] invalid method: " + exchange.getRequestMethod());
                 sendJson(exchange, 405, "{\"status\":\"method_not_allowed\"}");
                 return;
             }
@@ -55,18 +63,29 @@ public class GithubPrWebhookServer {
             String body = readBody(exchange.getRequestBody());
             String signature = exchange.getRequestHeaders().getFirst("X-Hub-Signature-256");
             if (!isSignatureValid(signature, body, webhookSecret)) {
+                System.out.println("[webhook] signature invalid or missing");
                 sendJson(exchange, 401, "{\"status\":\"unauthorized\"}");
                 return;
             }
 
             String action = extractString(body, "action");
-            boolean merged = extractBoolean(body, "merged");
-            String baseRef = extractNestedString(body, "base", "ref");
-            String headRef = extractNestedString(body, "head", "ref");
-            String title = extractString(body, "title");
-            String bodyText = extractNullableString(body, "body");
+            String pullRequestJson = extractObject(body, "pull_request");
+            boolean merged = extractBoolean(pullRequestJson, "merged");
+            String baseRef = extractNestedString(pullRequestJson, "base", "ref");
+            String headRef = extractNestedString(pullRequestJson, "head", "ref");
+            String title = extractString(pullRequestJson, "title");
+            if (title.isBlank()) {
+                title = extractString(body, "title");
+            }
+            String bodyText = extractNullableString(pullRequestJson, "body");
+            if (bodyText.isBlank()) {
+                bodyText = extractNullableString(body, "body");
+            }
+
+            System.out.println("[webhook] received event action=" + action + " merged=" + merged + " baseRef=" + baseRef + " headRef=" + headRef);
 
             if (!"closed".equals(action) || !merged) {
+                System.out.println("[webhook] ignored event - not a merged PR");
                 sendJson(exchange, 200, "{\"status\":\"ignored\"}");
                 return;
             }
@@ -74,6 +93,7 @@ public class GithubPrWebhookServer {
             String targetBranch = normalizeBranch(baseRef);
             String combinedText = title + "\n" + bodyText + "\n" + headRef;
             List<String> issues = extractor.extract(combinedText);
+            System.out.println("[webhook] extracted issues=" + issues + " from title/body/branch");
             if (issues.isEmpty()) {
                 sendJson(exchange, 200, "{\"status\":\"no_jira_key_found\"}");
                 return;
@@ -81,19 +101,60 @@ public class GithubPrWebhookServer {
 
             for (String issue : issues) {
                 try {
+                    System.out.println("[webhook] transitioning issue=" + issue + " branch=" + targetBranch);
                     transitionService.transitionIssue(issue, targetBranch);
                 } catch (IOException e) {
+                    System.out.println("[webhook] transition failed for " + issue + " error=" + e.getMessage());
                     sendJson(exchange, 500, "{\"status\":\"error\",\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
                     return;
                 }
             }
 
-            sendJson(exchange, 200, "{\"status\":\"ok\",\"branch\":\"" + escapeJson(targetBranch) + "\",\"issues\":" + issues + "}");
+            sendJson(exchange, 200, "{\"status\":\"ok\",\"branch\":\"" + escapeJson(targetBranch) + "\",\"issues\":" + toJsonArray(issues) + "}");
         });
 
         server.setExecutor(null);
         server.start();
         System.out.println("Webhook server started on http://localhost:" + port + "/github/pr");
+    }
+
+    private static void loadDotEnv() {
+        File dotEnvFile = new File(".env");
+        if (!dotEnvFile.exists()) {
+            return;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(dotEnvFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#") || !line.contains("=")) {
+                    continue;
+                }
+                String[] parts = line.split("=", 2);
+                if (parts.length != 2) {
+                    continue;
+                }
+                String key = parts[0].trim();
+                String value = parts[1].trim();
+                dotEnv.putIfAbsent(key, value);
+            }
+        } catch (IOException e) {
+            System.out.println("[dotenv] failed to read .env file: " + e.getMessage());
+        }
+    }
+
+    private static String getEnv(String key) {
+        String value = System.getenv(key);
+        if (value != null && !value.isBlank()) {
+            return value;
+        }
+        return dotEnv.get(key);
+    }
+
+    private static String getEnv(String key, String defaultValue) {
+        String value = getEnv(key);
+        return (value == null || value.isBlank()) ? defaultValue : value;
     }
 
     private static boolean isSignatureValid(String signature, String body, String secret) {
@@ -143,6 +204,21 @@ public class GithubPrWebhookServer {
         return branch.replace("refs/heads/", "").replace("origin/", "");
     }
 
+    private static String toJsonArray(List<String> items) {
+        StringBuilder builder = new StringBuilder();
+        builder.append('[');
+        boolean first = true;
+        for (String item : items) {
+            if (!first) {
+                builder.append(',');
+            }
+            builder.append('"').append(escapeJson(item)).append('"');
+            first = false;
+        }
+        builder.append(']');
+        return builder.toString();
+    }
+
     private static String extractString(String payload, String key) {
         Pattern pattern = Pattern.compile("\\\"" + Pattern.quote(key) + "\\\"\\s*:\\s*(\\\"((?:\\\\.|[^\\\"]*)*)\\\"|null)");
         Matcher matcher = pattern.matcher(payload);
@@ -177,6 +253,15 @@ public class GithubPrWebhookServer {
             return "";
         }
         return value.replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
+    }
+
+    private static String extractObject(String payload, String key) {
+        Pattern pattern = Pattern.compile("\\\"" + Pattern.quote(key) + "\\\"\\s*:\\s*(\\{.*\\})");
+        Matcher matcher = pattern.matcher(payload);
+        if (!matcher.find()) {
+            return "";
+        }
+        return matcher.group(1);
     }
 
     private static String escapeJson(String value) {
