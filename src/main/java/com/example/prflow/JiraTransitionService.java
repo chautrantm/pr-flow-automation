@@ -12,6 +12,9 @@ import java.util.Map;
 
 public class JiraTransitionService {
 
+    private static final String TRANSITIONS_PATH_TEMPLATE = "/rest/api/3/issue/%s/transitions";
+    private static final String TRANSITION_PAYLOAD_TEMPLATE = "{\"transition\":{\"id\":\"%s\"}}";
+
     private final String jiraBaseUrl;
     private final String botEmail;
     private final String apiToken;
@@ -40,31 +43,42 @@ public class JiraTransitionService {
 
         transitionIssueInternal(issueKey, transitionId);
 
-        if (!parentIssueKey.isBlank() && !epicTransitionId.isBlank()) {
+        if (shouldTransitionParentIssue()) {
             transitionIssueInternal(parentIssueKey, epicTransitionId);
         }
     }
 
+    private boolean shouldTransitionParentIssue() {
+        return !parentIssueKey.isBlank() && !epicTransitionId.isBlank();
+    }
+
     private void transitionIssueInternal(String issueKey, String transitionId) throws IOException {
-        String url = jiraBaseUrl + "/rest/api/3/issue/" + issueKey + "/transitions";
-        String payload = "{\"transition\":{\"id\":\"" + transitionId + "\"}}";
+        String url = jiraBaseUrl + String.format(TRANSITIONS_PATH_TEMPLATE, issueKey);
+        String payload = String.format(TRANSITION_PAYLOAD_TEMPLATE, transitionId);
 
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setRequestMethod("POST");
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("Content-Type", "application/json");
-        connection.setRequestProperty("Authorization", "Basic " + basicAuth(botEmail, apiToken));
-        connection.setDoOutput(true);
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Authorization", "Basic " + basicAuth(botEmail, apiToken));
+            connection.setDoOutput(true);
 
-        try (OutputStream outputStream = connection.getOutputStream()) {
-            outputStream.write(payload.getBytes(StandardCharsets.UTF_8));
-        }
+            try (OutputStream outputStream = connection.getOutputStream()) {
+                outputStream.write(payload.getBytes(StandardCharsets.UTF_8));
+            }
 
-        int statusCode = connection.getResponseCode();
-        String responseBody = readBody(connection);
-        System.out.println("[jira] issue=" + issueKey + " transitionId=" + transitionId + " status=" + statusCode + " response=" + responseBody);
-        if (statusCode >= 400) {
-            throw new IOException("Jira transition failed: " + statusCode + " " + responseBody);
+            int statusCode = connection.getResponseCode();
+            String responseBody = readBody(connection);
+            System.out.println("[jira] issue=" + issueKey + " transitionId=" + transitionId + " status=" + statusCode + " response=" + responseBody);
+            if (statusCode >= 400) {
+                throw new IOException("Jira transition failed: " + statusCode + " " + responseBody);
+            }
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
     }
 

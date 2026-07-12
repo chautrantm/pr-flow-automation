@@ -24,7 +24,8 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class GithubPrWebhookServer {
 
-    private static final Map<String, String> dotEnv = new LinkedHashMap<>();
+    private static final Map<String, String> DOT_ENV = new LinkedHashMap<>();
+    private static final String WEBHOOK_PATH = "/github/pr";
 
     public static void main(String[] args) throws IOException {
         loadDotEnv();
@@ -48,11 +49,18 @@ public class GithubPrWebhookServer {
         String epicTransitionId = getEnv("JIRA_TRANSITION_EPIC", "");
         String parentIssueKey = getEnv("JIRA_PARENT_ISSUE_KEY", "");
 
-        JiraTransitionService transitionService = new JiraTransitionService(jiraBaseUrl, jiraEmail, jiraToken, transitions, epicTransitionId, parentIssueKey);
+        JiraTransitionService transitionService = new JiraTransitionService(
+                jiraBaseUrl,
+                jiraEmail,
+                jiraToken,
+                transitions,
+                epicTransitionId,
+                parentIssueKey
+        );
         JiraKeyExtractor extractor = new JiraKeyExtractor();
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/github/pr", exchange -> {
+        server.createContext(WEBHOOK_PATH, exchange -> {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
                 System.out.println("[webhook] invalid method: " + exchange.getRequestMethod());
                 sendJson(exchange, 405, "{\"status\":\"method_not_allowed\"}");
@@ -76,6 +84,7 @@ public class GithubPrWebhookServer {
             if (title.isBlank()) {
                 title = extractString(body, "title");
             }
+
             String bodyText = extractNullableString(pullRequestJson, "body");
             if (bodyText.isBlank()) {
                 bodyText = extractNullableString(body, "body");
@@ -92,6 +101,7 @@ public class GithubPrWebhookServer {
             String targetBranch = normalizeBranch(baseRef);
             String combinedText = title + "\n" + bodyText + "\n" + headRef;
             List<String> issues = extractor.extract(combinedText);
+
             System.out.println("[webhook] extracted issues=" + issues + " from title/body/branch");
             if (issues.isEmpty()) {
                 sendJson(exchange, 200, "{\"status\":\"no_jira_key_found\"}");
@@ -114,7 +124,7 @@ public class GithubPrWebhookServer {
 
         server.setExecutor(null);
         server.start();
-        System.out.println("Webhook server started on http://localhost:" + port + "/github/pr");
+        System.out.println("Webhook server started on http://localhost:" + port + WEBHOOK_PATH);
     }
 
     private static void loadDotEnv() {
@@ -136,7 +146,7 @@ public class GithubPrWebhookServer {
                 }
                 String key = parts[0].trim();
                 String value = parts[1].trim();
-                dotEnv.putIfAbsent(key, value);
+                DOT_ENV.putIfAbsent(key, value);
             }
         } catch (IOException e) {
             System.out.println("[dotenv] failed to read .env file: " + e.getMessage());
@@ -148,7 +158,7 @@ public class GithubPrWebhookServer {
         if (value != null && !value.isBlank()) {
             return value;
         }
-        return dotEnv.get(key);
+        return DOT_ENV.get(key);
     }
 
     private static String getEnv(String key, String defaultValue) {

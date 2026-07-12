@@ -1,7 +1,7 @@
 package com.example.prflow;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -16,7 +16,7 @@ public class JiraKeyExtractor {
             return new ArrayList<>();
         }
 
-        Set<String> keys = new HashSet<>();
+        Set<String> keys = new LinkedHashSet<>();
         Matcher matcher = JIRA_KEY_PATTERN.matcher(text);
         while (matcher.find()) {
             keys.add(matcher.group(1));
