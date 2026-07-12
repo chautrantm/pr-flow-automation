@@ -1,0 +1,14 @@
+{
+  "action": "closed",
+  "pull_request": {
+    "merged": true,
+    "title": "[SCRUM-2] Test Jira transition",
+    "body": "This PR fixes the issue.",
+    "base": {
+      "ref": "main"
+    },
+    "head": {
+      "ref": "feature/SCRUM-2-test"
+    }
+  }
+}

@@ -219,16 +219,16 @@ public class GithubPrWebhookServer {
     }
 
     private static String extractString(String payload, String key) {
-        Pattern pattern = Pattern.compile("\\\"" + Pattern.quote(key) + "\\\"\\s*:\\s*(\\\"((?:\\\\.|[^\\\"]*)*)\\\"|null)");
-        Matcher matcher = pattern.matcher(payload);
-        if (!matcher.find()) {
+        try {
+            Pattern pattern = Pattern.compile("\\\"" + Pattern.quote(key) + "\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"");
+            Matcher matcher = pattern.matcher(payload);
+            if (!matcher.find()) {
+                return "";
+            }
+            return matcher.group(1);
+        } catch (Exception e) {
             return "";
         }
-        String value = matcher.group(2);
-        if (value == null) {
-            return "";
-        }
-        return value.replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
     }
 
     private static String extractNullableString(String payload, String key) {
@@ -242,25 +242,38 @@ public class GithubPrWebhookServer {
     }
 
     private static String extractNestedString(String payload, String parentKey, String childKey) {
-        Pattern pattern = Pattern.compile("\\\"" + Pattern.quote(parentKey) + "\\\"\\s*:\\s*\\{[^}]*\\\"" + Pattern.quote(childKey) + "\\\"\\s*:\\s*(\\\"((?:\\\\.|[^\\\"]*)*)\\\"|null)");
-        Matcher matcher = pattern.matcher(payload);
-        if (!matcher.find()) {
+        try {
+            Pattern parentPattern = Pattern.compile("\\\"" + Pattern.quote(parentKey) + "\\\"\\s*:\\s*\\{([^}]+)\\}");
+            Matcher parentMatcher = parentPattern.matcher(payload);
+            if (!parentMatcher.find()) {
+                return "";
+            }
+            String parentContent = parentMatcher.group(1);
+
+            Pattern childPattern = Pattern.compile("\\\"" + Pattern.quote(childKey) + "\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"");
+            Matcher childMatcher = childPattern.matcher(parentContent);
+            if (!childMatcher.find()) {
+                return "";
+            }
+
+            String value = childMatcher.group(1);
+            return value.replace("\\n", "\n").replace("\\\\", "\\");
+        } catch (Exception e) {
             return "";
         }
-        String value = matcher.group(2);
-        if (value == null) {
-            return "";
-        }
-        return value.replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
     }
 
     private static String extractObject(String payload, String key) {
-        Pattern pattern = Pattern.compile("\\\"" + Pattern.quote(key) + "\\\"\\s*:\\s*(\\{.*\\})");
-        Matcher matcher = pattern.matcher(payload);
-        if (!matcher.find()) {
+        try {
+            Pattern pattern = Pattern.compile("\\\"" + Pattern.quote(key) + "\\\"\\s*:\\s*(\\{(?:[^{}]|\\{[^{}]*\\})*\\})");
+            Matcher matcher = pattern.matcher(payload);
+            if (!matcher.find()) {
+                return "";
+            }
+            return matcher.group(1);
+        } catch (Exception e) {
             return "";
         }
-        return matcher.group(1);
     }
 
     private static String escapeJson(String value) {
